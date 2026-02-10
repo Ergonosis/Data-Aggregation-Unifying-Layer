@@ -23,10 +23,15 @@ PLAID_ENVS = {
 }
 
 
-def _env(name: str) -> str:
+def _env_or_arg(name: str, arg_value: str | None) -> str:
+    if arg_value:
+        return arg_value
     value = os.getenv(name, "").strip()
     if not value:
-        raise SystemExit(f"Missing required env var: {name}")
+        prompt = f"Enter {name}: "
+        value = input(prompt).strip()
+    if not value:
+        raise SystemExit(f"Missing required value: {name} (env, CLI arg, or prompt)")
     return value
 
 
@@ -100,14 +105,24 @@ def transactions_get(
 
 
 def main() -> None:
+    # Optional .env loading if python-dotenv is installed.
+    try:
+        from dotenv import load_dotenv  # type: ignore
+
+        load_dotenv()
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(description="Plaid local data puller")
     parser.add_argument("--access-token", help="Use an existing access_token")
     parser.add_argument("--institution-id", default="ins_109508", help="Sandbox institution id")
     parser.add_argument("--days", type=int, default=30, help="Transaction lookback window")
+    parser.add_argument("--client-id", help="Override PLAID_CLIENT_ID")
+    parser.add_argument("--secret", help="Override PLAID_SECRET")
     args = parser.parse_args()
 
-    client_id = _env("PLAID_CLIENT_ID")
-    secret = _env("PLAID_SECRET")
+    client_id = _env_or_arg("PLAID_CLIENT_ID", args.client_id)
+    secret = _env_or_arg("PLAID_SECRET", args.secret)
     env = os.getenv("PLAID_ENV", "sandbox").strip().lower()
     if env not in PLAID_ENVS:
         raise SystemExit(f"PLAID_ENV must be one of: {', '.join(PLAID_ENVS.keys())}")
