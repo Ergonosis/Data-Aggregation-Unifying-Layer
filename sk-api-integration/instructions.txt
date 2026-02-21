@@ -1,0 +1,17 @@
+Enter virtual env: 
+- Windows User: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+- Powershell: .\venv\Scripts\Activate.ps1
+Run: pip install -r requirements.txt
+Launch: Run python app.py and navigate to http://localhost:5000.
+Sandbox Login: When the Plaid window opens, use:
+- Username: user_good
+- Password: pass_good
+Verify: Check the /storage/plaid/ folder for your newly aggregated transaction history.
+
+steps for logging in:
+no phone #
+chase
+user_good
+welcome
+1234
+checkall
