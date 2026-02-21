@@ -1,8 +1,11 @@
+Make virtual env: python -m venv venv
 Enter virtual env: 
 - Windows User: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Powershell: .\venv\Scripts\Activate.ps1
+- Mac: source venv/bin/activate
 Run: pip install -r requirements.txt
-Launch: Run python app.py and navigate to http://localhost:5000.
+#Run: pip install flask plaid-python python-dotenv
+Launch: Run "python app.py" and navigate to http://localhost:5000.
 Sandbox Login: When the Plaid window opens, use:
 - Username: user_good
 - Password: pass_good
@@ -12,6 +15,6 @@ steps for logging in:
 no phone #
 chase
 user_good
-welcome
+pass_good
 1234
-checkall
+check all
