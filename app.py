@@ -2,13 +2,12 @@ import os, json
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from extractors.plaid_ext import PlaidExtractor
-# from extractors.ms_graph_ext import MSGraphExtractor # MSGraph Commented Out
 
 load_dotenv()
 app = Flask(__name__)
 
-# Ensure Storage Folders Exist
-os.makedirs("storage/plaid", exist_ok=True)
+# Ensure Storage Folder Exists
+os.makedirs("storage", exist_ok=True)
 
 # Initialize Plaid
 plaid_engine = PlaidExtractor(
@@ -16,8 +15,6 @@ plaid_engine = PlaidExtractor(
     os.getenv("PLAID_SECRET"), 
     os.getenv("PLAID_ENV")
 )
-
-# ms_engine = MSGraphExtractor(...) # MSGraph Commented Out
 
 @app.route('/')
 def index():
@@ -34,7 +31,7 @@ def create_link_token():
 
     request_data = LinkTokenCreateRequest(
         products=[Products('transactions')],
-        client_name="Phase I Aggregator",
+        client_name="Data Aggregation Service",
         country_codes=[CountryCode('US')],
         language='en',
         user=LinkTokenCreateRequestUser(client_user_id='unique_user_id_123')
@@ -58,16 +55,11 @@ def exchange_token():
     data = plaid_engine.get_transactions(access_token)
     
     # Persistence Layer: Store as JSON
-    filename = f"storage/plaid/transactions_{exchange_response['item_id']}.json"
+    filename = f"storage/transactions_{exchange_response['item_id']}.json"
     with open(filename, "w") as f:
         json.dump(data, f, indent=4, default=str)
         
     return jsonify({"status": "complete", "file_saved": filename})
-
-# MSGraph Route Commented Out
-# @app.route('/api/extract_ms', methods=['POST'])
-# def extract_ms():
-#     pass
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
