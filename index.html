@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Plaid Aggregation Layer</title>
+</head>
+<body style="font-family: sans-serif; padding: 40px;">
+    <h1>Data Aggregation: Phase I (Plaid)</h1>
+    <p>Click below to launch the Link flow and aggregate your Sandbox transactions.</p>
+    
+    <button id="link-button" style="padding: 15px 30px; background: #0078d4; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        Launch Plaid Link
+    </button>
+
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script>
+        const linkButton = document.getElementById('link-button');
+
+        linkButton.onclick = async () => {
+            // 1. Get the link_token from our server
+            const response = await fetch('/api/create_link_token', { method: 'POST' });
+            const { link_token } = await response.json();
+
+            // 2. Initialize Link
+            const handler = Plaid.create({
+                token: link_token,
+                onSuccess: async (public_token, metadata) => {
+                    // 3. Send public_token to server for exchange
+                    const result = await fetch('/api/exchange_public_token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ public_token: public_token }),
+                    });
+                    const finalData = await result.json();
+                    alert("Extraction Complete! Data saved to: " + finalData.file_saved);
+                },
+                onExit: (err, metadata) => { if (err != null) console.error(err); }
+            });
+
+            handler.open();
+        };
+    </script>
+</body>
+</html>
