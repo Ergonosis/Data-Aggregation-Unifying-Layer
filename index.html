@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>Connect Bank Account</h1>
+    <button id="btn">Launch Plaid Link</button>
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script>
+        document.getElementById('btn').onclick = async () => {
+            const res = await fetch('/api/create_link_token', {method: 'POST'});
+            const { link_token } = await res.json();
+            const handler = Plaid.create({
+                token: link_token,
+                onSuccess: async (public_token) => {
+                    await fetch('/api/exchange_public_token', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ public_token })
+                    });
+                    alert("Account Connected & 2-Year History Pulled!");
+                }
+            });
+            handler.open();
+        };
+    </script>
+</body>
+</html>
