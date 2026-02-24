@@ -10,6 +10,7 @@ def main():
         start_date=date(2024, 1, 1),
         end_date=date(2024, 2, 23),
         bank_filter="Chase",  # Can be "Chase", "Wells Fargo", or an Item ID
+        account_filter=["Plaid Checking", "Plaid Saving"],  # Optional: one or many account names/keywords
         output_dir=get_records_dir()
     )
 

@@ -91,8 +91,6 @@ PLAID_ENV=sandbox
 # Output directory for tokens, metadata, and JSON exports
 RECORDS_DIR=records
 
-# Optional: rolling sync window used by sync_data.py
-SYNC_WINDOW_DAYS=7
 ```
 
 ### 4) Run Plaid connect app

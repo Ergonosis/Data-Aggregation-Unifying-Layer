@@ -72,8 +72,12 @@ def _fetch_accounts_only(client, access_token):
 def _account_matches(account, account_filter):
     if not account_filter:
         return True
-    needle = str(account_filter).strip().lower()
-    if not needle:
+    needles = [
+        str(value).strip().lower()
+        for value in (account_filter if isinstance(account_filter, list) else [account_filter])
+        if str(value).strip()
+    ]
+    if not needles:
         return True
     haystack = " ".join(
         [
@@ -85,7 +89,7 @@ def _account_matches(account, account_filter):
             str(account.get("type", "")),
         ]
     ).lower()
-    return needle in haystack
+    return any(needle in haystack for needle in needles)
 
 
 def _strip_balances(accounts):
