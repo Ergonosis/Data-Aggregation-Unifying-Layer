@@ -9,13 +9,14 @@ The application provides a simple web flow to connect a Plaid institution and ex
 - `app.py` hosts a Flask API and serves the frontend.
 - `index.html` launches Plaid Link in the browser.
 - `extractors/plaid_ext.py` wraps Plaid API access and retrieves transactions.
-- Extracted data is written to `storage/transactions_<item_id>.json`.
+- Extracted data is written to `records/`.
 
 ## Key Features
 
 - Plaid Link onboarding via `POST /api/create_link_token`.
 - Secure token exchange via `POST /api/exchange_public_token`.
-- Automatic retrieval of the last 30 days of transactions.
+- Automatic initial retrieval of full available transaction history after account linking.
+- On-demand parameterized export via `POST /api/fetch_date_range`.
 - JSON persistence for auditability and easy handoff to analytics pipelines.
 - Minimal modular extractor structure for future source expansion.
 
@@ -31,8 +32,8 @@ The application provides a simple web flow to connect a Plaid institution and ex
   - Calls Plaid Transactions API and returns structured response data.
 - `index.html`
   - Frontend trigger for Plaid Link and backend API calls.
-- `storage/`
-  - Local storage location for generated JSON outputs.
+- `records/`
+  - Local output location for generated JSON and logs.
 
 ### Runtime Flow
 
@@ -40,7 +41,8 @@ The application provides a simple web flow to connect a Plaid institution and ex
 2. Frontend requests a Plaid `link_token` from `/api/create_link_token`.
 3. User completes Plaid Link and frontend receives a `public_token`.
 4. Frontend sends `public_token` to `/api/exchange_public_token`.
-5. Backend exchanges token, fetches transactions, and saves JSON to `storage/`.
+5. Backend exchanges token, fetches full available history, and saves JSON to `records/`.
+6. User can request additional exports with optional filters from the UI.
 
 ## Quick Start
 
@@ -92,9 +94,50 @@ Then open `http://localhost:5000`.
 
 ### 5) Validate output
 
-After completing Plaid Link, check `storage/` for a file named:
+After completing Plaid Link, check `records/` for a file named:
 
-- `transactions_<item_id>.json`
+- `full_history_<start_date>_to_<end_date>_<item_id>.json`
+
+To export custom data, use the UI and click `Fetch Date Range`.
+All filter fields are optional and treated as "all" when empty.
+This creates files named:
+
+- `range_<start_date>_to_<end_date>_<item_id>.json`
+
+Supported filters:
+
+- `start_date`, `end_date` (if omitted, defaults to full range)
+- `item_id` (specific linked bank connection; string or list)
+- `financial_institution` (name/id substring, e.g. Chase/Amex; string or list)
+- `account_filter` (account id / mask last4 / name substring)
+- `include_transactions` (`true`/`false`)
+- `include_balances` (`true`/`false`)
+
+Behavior:
+
+- If no `item_id` and no `financial_institution`, exports all linked items.
+- If user has Chase and Amex linked, one export call can produce one file per matched item.
+- Initial link still performs full available history export for that linked item.
+
+Example single institution:
+
+```json
+{
+  "financial_institution": "chase",
+  "start_date": "2026-02-17",
+  "end_date": "2026-02-24"
+}
+```
+
+Example multiple institutions in one call:
+
+```json
+{
+  "financial_institution": ["chase", "amex"],
+  "start_date": "2026-02-17",
+  "end_date": "2026-02-24"
+}
+```
 
 ## Project Structure
 
@@ -104,10 +147,11 @@ Data-Aggregation-Unifying-Layer/
 ├── app.py
 ├── index.html
 ├── requirements.txt
+├── setup_weekly_cron.py
 ├── extractors/
 │   ├── __init__.py
 │   └── plaid_ext.py
-├── storage/
+├── records/
 └── original/
 ```
 
@@ -115,4 +159,5 @@ Data-Aggregation-Unifying-Layer/
 
 - For local testing, use `PLAID_ENV=sandbox`.
 - For real users and business data, switch to `PLAID_ENV=development` (or `production` when live) and use the corresponding Plaid credentials for that environment.
-- Transaction extraction currently pulls a rolling 30-day window, defined in `extractors/plaid_ext.py`.
+- Initial account connect exports full available history using pagination.
+- Date-range exports are user-triggered and generated on demand.
