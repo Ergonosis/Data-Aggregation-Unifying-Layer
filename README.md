@@ -42,7 +42,7 @@ Data is written to `RECORDS_DIR` (default: `records`).
 2. Frontend requests a Plaid `link_token` from `/api/create_link_token`.
 3. Plaid Link returns a `public_token`.
 4. Frontend sends `public_token` to `/api/exchange_public_token`.
-5. Backend exchanges token, saves credentials/metadata, and writes full-history JSON.
+5. Backend exchanges token, saves credentials/metadata, and writes an initial historical JSON export.
 6. Additional exports are run with `run_script.py`.
 
 ## Quick Start
@@ -117,8 +117,7 @@ Files are written to `RECORDS_DIR` (default `records/`):
 
 - `tokens.json`: item_id -> access_token
 - `items.json`: item metadata (institution info)
-- `full_history_<start>_to_<end>_<item_id>.json`: initial connect export
-- `range_<start>_to_<end>_<item_id>.json`: manual run_script export
+- `range_<start>_to_<end>_<item_id>.json`: initial connect export and manual `run_script.py` export
 
 ## Project Structure
 
