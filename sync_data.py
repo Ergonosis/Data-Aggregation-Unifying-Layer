@@ -4,6 +4,9 @@ from extractors.plaid_ext import PlaidExtractor, fetch_and_store
 
 load_dotenv()
 
+def get_records_dir():
+    return os.getenv("RECORDS_DIR", "records")
+
 def get_weekly_window_days():
     raw = os.getenv("SYNC_WINDOW_DAYS", "7")
     try:
@@ -19,12 +22,14 @@ def get_weekly_window_days():
 def sync():
     engine = PlaidExtractor(os.getenv("PLAID_CLIENT_ID"), os.getenv("PLAID_SECRET"), os.getenv("PLAID_ENV"))
     weekly_window_days = get_weekly_window_days()
+    records_dir = get_records_dir()
     
-    if not os.path.exists("records/tokens.json"):
+    tokens_path = os.path.join(records_dir, "tokens.json")
+    if not os.path.exists(tokens_path):
         print("No tokens found. Connect an account via app.py first.")
         return
 
-    with open("records/tokens.json", 'r') as f:
+    with open(tokens_path, 'r') as f:
         tokens = json.load(f)
 
     for item_id, access_token in tokens.items():
@@ -35,6 +40,7 @@ def sync():
             item_id=item_id,
             is_hard_pull=False,
             window_days=weekly_window_days,
+            output_dir=records_dir,
         )
         print(f"Created weekly update ({weekly_window_days} day window): {file}")
 

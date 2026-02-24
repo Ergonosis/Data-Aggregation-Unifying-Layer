@@ -109,6 +109,7 @@ def fetch_and_store(
     include_transactions=True,
     include_balances=True,
     account_filter=None,
+    output_dir=None,
 ):
     if end_date is None:
         end_date = date.today()
@@ -177,8 +178,9 @@ def fetch_and_store(
             prefix = "range"
 
     item_suffix = f"_{item_id}" if item_id else ""
-    filename = f"records/{prefix}_{start_date}_to_{end_date}{item_suffix}.json"
-    os.makedirs("records", exist_ok=True)
+    output_dir = output_dir or os.getenv("RECORDS_DIR", "records")
+    filename = os.path.join(output_dir, f"{prefix}_{start_date}_to_{end_date}{item_suffix}.json")
+    os.makedirs(output_dir, exist_ok=True)
 
     with open(filename, "w") as f:
         json.dump(data, f, indent=4, default=str)

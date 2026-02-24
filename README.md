@@ -9,7 +9,7 @@ The application provides a simple web flow to connect a Plaid institution and ex
 - `app.py` hosts a Flask API and serves the frontend.
 - `index.html` launches Plaid Link in the browser.
 - `extractors/plaid_ext.py` wraps Plaid API access and retrieves transactions.
-- Extracted data is written to `records/`.
+- Extracted data is written to `RECORDS_DIR` (default `records/`).
 
 ## Key Features
 
@@ -32,7 +32,7 @@ The application provides a simple web flow to connect a Plaid institution and ex
   - Calls Plaid Transactions API and returns structured response data.
 - `index.html`
   - Frontend trigger for Plaid Link and backend API calls.
-- `records/`
+- `RECORDS_DIR` (default `records/`)
   - Local output location for generated JSON and logs.
 
 ### Runtime Flow
@@ -41,7 +41,7 @@ The application provides a simple web flow to connect a Plaid institution and ex
 2. Frontend requests a Plaid `link_token` from `/api/create_link_token`.
 3. User completes Plaid Link and frontend receives a `public_token`.
 4. Frontend sends `public_token` to `/api/exchange_public_token`.
-5. Backend exchanges token, fetches full available history, and saves JSON to `records/`.
+5. Backend exchanges token, fetches full available history, and saves JSON to `RECORDS_DIR`.
 6. User can request additional exports with optional filters from the UI.
 
 ## Quick Start
@@ -82,6 +82,13 @@ Create `.env` in the repository root:
 PLAID_CLIENT_ID=your_client_id
 PLAID_SECRET=your_secret
 PLAID_ENV=sandbox
+
+# Optional defaults for manual exports when start/end are left blank
+EXPORT_START_DATE=2026-01-01
+EXPORT_END_DATE=2026-01-31
+
+# Optional output directory for tokens, metadata, and JSON exports
+RECORDS_DIR=records
 ```
 
 ### 4) Run the application
@@ -94,7 +101,7 @@ Then open `http://localhost:5000`.
 
 ### 5) Validate output
 
-After completing Plaid Link, check `records/` for a file named:
+After completing Plaid Link, check your `RECORDS_DIR` (default `records/`) for a file named:
 
 - `full_history_<start_date>_to_<end_date>_<item_id>.json`
 
@@ -106,7 +113,7 @@ This creates files named:
 
 Supported filters:
 
-- `start_date`, `end_date` (if omitted, defaults to full range)
+- `start_date`, `end_date` (if omitted, uses `.env` defaults `EXPORT_START_DATE` / `EXPORT_END_DATE`; otherwise full range)
 - `item_id` (specific linked bank connection; string or list)
 - `financial_institution` (name/id substring, e.g. Chase/Amex; string or list)
 - `account_filter` (account id / mask last4 / name substring)
@@ -151,7 +158,7 @@ Data-Aggregation-Unifying-Layer/
 ├── extractors/
 │   ├── __init__.py
 │   └── plaid_ext.py
-├── records/
+├── records/ (default, can be changed with `RECORDS_DIR`)
 └── original/
 ```
 

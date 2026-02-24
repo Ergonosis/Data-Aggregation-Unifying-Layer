@@ -9,9 +9,27 @@ app = Flask(__name__)
 
 plaid_engine = PlaidExtractor(os.getenv("PLAID_CLIENT_ID"), os.getenv("PLAID_SECRET"), os.getenv("PLAID_ENV"))
 
+def get_records_dir():
+    return os.getenv("RECORDS_DIR", "records")
+
+def parse_date_or_none(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+def get_default_start_date():
+    return parse_date_or_none(os.getenv("EXPORT_START_DATE"))
+
+def get_default_end_date():
+    return parse_date_or_none(os.getenv("EXPORT_END_DATE"))
+
 def save_token(item_id, access_token):
-    path = "records/tokens.json"
-    os.makedirs("records", exist_ok=True)
+    records_dir = get_records_dir()
+    path = os.path.join(records_dir, "tokens.json")
+    os.makedirs(records_dir, exist_ok=True)
     tokens = {}
     if os.path.exists(path):
         with open(path, 'r') as f: tokens = json.load(f)
@@ -19,8 +37,9 @@ def save_token(item_id, access_token):
     with open(path, 'w') as f: json.dump(tokens, f)
 
 def save_item_metadata(item_id, institution_id=None, institution_name=None):
-    path = "records/items.json"
-    os.makedirs("records", exist_ok=True)
+    records_dir = get_records_dir()
+    path = os.path.join(records_dir, "items.json")
+    os.makedirs(records_dir, exist_ok=True)
     items = {}
     if os.path.exists(path):
         with open(path, "r") as f:
@@ -34,14 +53,14 @@ def save_item_metadata(item_id, institution_id=None, institution_name=None):
         json.dump(items, f)
 
 def load_tokens():
-    path = "records/tokens.json"
+    path = os.path.join(get_records_dir(), "tokens.json")
     if not os.path.exists(path):
         return {}
     with open(path, "r") as f:
         return json.load(f)
 
 def load_item_metadata():
-    path = "records/items.json"
+    path = os.path.join(get_records_dir(), "items.json")
     if not os.path.exists(path):
         return {}
     with open(path, "r") as f:
@@ -132,6 +151,7 @@ def exchange():
         access_token,
         item_id=item_id,
         is_hard_pull=True,
+        output_dir=get_records_dir(),
     )
     return jsonify(
         {
@@ -170,13 +190,15 @@ def fetch_date_range():
     include_transactions = str_to_bool(body.get("include_transactions"), default=True)
     include_balances = str_to_bool(body.get("include_balances"), default=True)
 
-    end_date = date.today() if not end_date_raw else None
+    env_default_end = get_default_end_date()
+    env_default_start = get_default_start_date()
+    end_date = (env_default_end or date.today()) if not end_date_raw else None
     if end_date is None:
         try:
             end_date = date.fromisoformat(end_date_raw)
         except ValueError:
             return jsonify({"error": "Invalid end_date format. Use YYYY-MM-DD."}), 400
-    start_date = date(2000, 1, 1) if not start_date_raw else None
+    start_date = (env_default_start or date(2000, 1, 1)) if not start_date_raw else None
     if start_date is None:
         try:
             start_date = date.fromisoformat(start_date_raw)
@@ -230,6 +252,7 @@ def fetch_date_range():
             include_transactions=include_transactions,
             include_balances=include_balances,
             account_filter=account_filter,
+            output_dir=get_records_dir(),
         )
         row = metadata.get(selected_item_id, {})
         results.append(
