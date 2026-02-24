@@ -119,7 +119,6 @@ Files are written to `RECORDS_DIR` (default `records/`):
 - `items.json`: item metadata (institution info)
 - `full_history_<start>_to_<end>_<item_id>.json`: initial connect export
 - `range_<start>_to_<end>_<item_id>.json`: manual run_script export
-- `weekly_<start>_to_<end>_<item_id>.json`: sync_data rolling export
 
 ## Project Structure
 
