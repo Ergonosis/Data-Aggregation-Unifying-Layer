@@ -1,52 +1,59 @@
 # Data Aggregation Unifying Layer
 
-This service extracts account transaction data from Plaid and stores the response as local JSON files for downstream processing.
+This service pulls account transaction data from Plaid and stores JSON files locally for downstream processing.
 
 ## System Overview
 
-The application provides a simple web flow to connect a Plaid institution and export recent transactions.
+The project has three execution paths:
 
-- `app.py` hosts a Flask API and serves the frontend.
-- `index.html` launches Plaid Link in the browser.
-- `extractors/plaid_ext.py` wraps Plaid API access and retrieves transactions.
-- Extracted data is written to `storage/transactions_<item_id>.json`.
+- `apps.py`: Flask app for Plaid Link token creation/exchange and initial full-history pull.
+- `run_script.py`: Script-based manual export where you set start/end dates in code.
+- `sync_data.py`: Rolling sync export for all connected items using a configurable window.
+
+Data is written to `RECORDS_DIR` (default: `records`).
 
 ## Key Features
 
 - Plaid Link onboarding via `POST /api/create_link_token`.
 - Secure token exchange via `POST /api/exchange_public_token`.
-- Automatic retrieval of the last 30 days of transactions.
-- JSON persistence for auditability and easy handoff to analytics pipelines.
-- Minimal modular extractor structure for future source expansion.
+- Automatic initial full-history export after account linking.
+- Manual date-range exports through `run_script.py`.
+- Rolling sync exports through `sync_data.py` using `SYNC_WINDOW_DAYS`.
+- JSON persistence for auditability and easy downstream integration.
 
 ## Architecture
 
 ### Components
 
-- `app.py`
+- `apps.py`
   - Initializes Flask and Plaid client wiring.
-  - Handles token creation, token exchange, and persistence orchestration.
+  - Stores linked account tokens/metadata.
+  - Triggers initial historical export for newly linked items.
 - `extractors/plaid_ext.py`
-  - Maps `PLAID_ENV` to the correct Plaid environment.
-  - Calls Plaid Transactions API and returns structured response data.
-- `index.html`
-  - Frontend trigger for Plaid Link and backend API calls.
-- `storage/`
-  - Local storage location for generated JSON outputs.
+  - Wraps Plaid API calls.
+  - Handles paginated transaction retrieval.
+  - Applies optional account filtering and writes output JSON.
+- `run_script.py`
+  - Calls `DataExporter.run_export(...)` with explicit dates and optional bank filter.
+- `sync_data.py`
+  - Reads saved tokens and exports a rolling window for each linked item.
+- `records/`
+  - Stores `tokens.json`, `items.json`, and exported data files.
 
 ### Runtime Flow
 
-1. User opens `http://localhost:5000`.
+1. Open `http://localhost:5000` and click `Connect Bank`.
 2. Frontend requests a Plaid `link_token` from `/api/create_link_token`.
-3. User completes Plaid Link and frontend receives a `public_token`.
+3. Plaid Link returns a `public_token`.
 4. Frontend sends `public_token` to `/api/exchange_public_token`.
-5. Backend exchanges token, fetches transactions, and saves JSON to `storage/`.
+5. Backend exchanges token, saves credentials/metadata, and writes full-history JSON.
+6. Additional exports are run with `run_script.py` or `sync_data.py`.
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.10 or newer
+- Python 3.10+
 - Plaid credentials
 
 ### 1) Create and activate a virtual environment
@@ -80,39 +87,69 @@ Create `.env` in the repository root:
 PLAID_CLIENT_ID=your_client_id
 PLAID_SECRET=your_secret
 PLAID_ENV=sandbox
+
+# Output directory for tokens, metadata, and JSON exports
+RECORDS_DIR=records
+
 ```
 
-### 4) Run the application
+### 4) Run Plaid connect app
 
 ```bash
-python app.py
+python apps.py
 ```
 
-Then open `http://localhost:5000`.
+Then open `http://localhost:5000` and connect an institution.
 
-### 5) Validate output
+### 5) Run a manual date-range export
 
-After completing Plaid Link, check `storage/` for a file named:
+Edit `run_script.py` and set:
 
-- `transactions_<item_id>.json`
+- `start_date`
+- `end_date`
+- optional `bank_filter`
+
+Then run:
+
+```bash
+python run_script.py
+```
+
+### 6) Run rolling sync export
+
+```bash
+python sync_data.py
+```
+
+## Output Files
+
+Files are written to `RECORDS_DIR` (default `records/`):
+
+- `tokens.json`: item_id -> access_token
+- `items.json`: item metadata (institution info)
+- `full_history_<start>_to_<end>_<item_id>.json`: initial connect export
+- `range_<start>_to_<end>_<item_id>.json`: manual run_script export
+- `weekly_<start>_to_<end>_<item_id>.json`: sync_data rolling export
 
 ## Project Structure
 
 ```text
 Data-Aggregation-Unifying-Layer/
 ├── README.md
-├── app.py
+├── apps.py
 ├── index.html
+├── run_script.py
+├── sync_data.py
 ├── requirements.txt
 ├── extractors/
 │   ├── __init__.py
 │   └── plaid_ext.py
-├── storage/
-└── original/
+└── records/ (default, configurable with RECORDS_DIR)
 ```
 
 ## Notes
 
-- For local testing, use `PLAID_ENV=sandbox`.
-- For real users and business data, switch to `PLAID_ENV=development` (or `production` when live) and use the corresponding Plaid credentials for that environment.
-- Transaction extraction currently pulls a rolling 30-day window, defined in `extractors/plaid_ext.py`.
+- Use `PLAID_ENV=sandbox` for local testing.
+- Switch to `development`/`production` with matching credentials when appropriate.
+- Initial account connect exports full available history.
+- `run_script.py` is where you define explicit date ranges.

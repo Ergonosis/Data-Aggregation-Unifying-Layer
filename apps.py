@@ -1,0 +1,133 @@
+import os, json
+from datetime import date
+from flask import Flask, request, jsonify, render_template_string
+from dotenv import load_dotenv
+from extractors.plaid_ext import PlaidExtractor, fetch_and_store
+
+load_dotenv()
+app = Flask(__name__)
+
+plaid_engine = PlaidExtractor(os.getenv("PLAID_CLIENT_ID"), os.getenv("PLAID_SECRET"), os.getenv("PLAID_ENV"))
+
+# --- Helper Functions ---
+
+def get_records_dir():
+    return os.getenv("RECORDS_DIR", "records")
+
+def load_tokens():
+    path = os.path.join(get_records_dir(), "tokens.json")
+    return json.load(open(path, "r")) if os.path.exists(path) else {}
+
+def load_item_metadata():
+    path = os.path.join(get_records_dir(), "items.json")
+    return json.load(open(path, "r")) if os.path.exists(path) else {}
+
+def save_token(item_id, access_token):
+    records_dir = get_records_dir()
+    os.makedirs(records_dir, exist_ok=True)
+    path = os.path.join(records_dir, "tokens.json")
+    tokens = load_tokens()
+    tokens[item_id] = access_token
+    with open(path, 'w') as f: json.dump(tokens, f)
+
+def save_item_metadata(item_id, institution_id, institution_name):
+    records_dir = get_records_dir()
+    path = os.path.join(records_dir, "items.json")
+    items = load_item_metadata()
+    items[item_id] = {
+        "item_id": item_id,
+        "institution_id": institution_id,
+        "institution_name": institution_name,
+    }
+    with open(path, "w") as f: json.dump(items, f)
+
+# --- The Core Method Call Class ---
+
+class DataExporter:
+    @staticmethod
+    def run_export(start_date=None, end_date=None, output_dir=None, bank_filter=None, account_filter=None):
+        """
+        The central method to pull data.
+        bank_filter: list of strings (e.g., ['Chase']) or a single string.
+        """
+        tokens = load_tokens()
+        metadata = load_item_metadata()
+        output_dir = output_dir or get_records_dir()
+        end_date = end_date or date.today()
+        start_date = start_date or date(2000, 1, 1)
+
+        selected_item_ids = []
+        if bank_filter:
+            needles = [n.lower() for n in (bank_filter if isinstance(bank_filter, list) else [bank_filter])]
+            for item_id in tokens.keys():
+                meta = metadata.get(item_id, {})
+                haystack = f"{meta.get('institution_name', '')} {meta.get('institution_id', '')} {item_id}".lower()
+                if any(needle in haystack for needle in needles):
+                    selected_item_ids.append(item_id)
+        else:
+            selected_item_ids = list(tokens.keys())
+
+        results = []
+        for item_id in selected_item_ids:
+            file_path = fetch_and_store(
+                plaid_engine.client,
+                tokens[item_id],
+                item_id=item_id,
+                start_date=start_date,
+                end_date=end_date,
+                output_dir=output_dir,
+                account_filter=account_filter
+            )
+            results.append({"item_id": item_id, "file": file_path})
+        return results
+
+# --- Flask Routes ---
+
+@app.route('/')
+def index():
+    if os.path.exists('index.html'):
+        return render_template_string(open('index.html').read())
+    return "Plaid connect page missing.", 404
+
+
+@app.route('/api/create_link_token', methods=['POST'])
+def link_token():
+    from plaid.model.link_token_create_request import LinkTokenCreateRequest
+    from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+    from plaid.model.products import Products
+    from plaid.model.country_code import CountryCode
+    req = LinkTokenCreateRequest(
+        products=[Products('transactions')],
+        client_name="Data Aggregator",
+        country_codes=[CountryCode('US')],
+        language='en',
+        user=LinkTokenCreateRequestUser(client_user_id='user_1')
+    )
+    return jsonify(plaid_engine.client.link_token_create(req).to_dict())
+
+@app.route('/api/exchange_public_token', methods=['POST'])
+def exchange():
+    from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+    from plaid.model.item_get_request import ItemGetRequest
+    from plaid.model.institutions_get_by_id_request import InstitutionsGetByIdRequest
+    from plaid.model.country_code import CountryCode
+
+    pub_token = request.json.get('public_token')
+    exchange_resp = plaid_engine.client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=pub_token))
+    access_token, item_id = exchange_resp['access_token'], exchange_resp["item_id"]
+    
+    # Resolve Metadata
+    inst_id = plaid_engine.client.item_get(ItemGetRequest(access_token=access_token)).to_dict()['item']['institution_id']
+    inst_name = plaid_engine.client.institutions_get_by_id(InstitutionsGetByIdRequest(
+        institution_id=inst_id, country_codes=[CountryCode("US")]
+    )).to_dict()['institution']['name']
+
+    save_token(item_id, access_token)
+    save_item_metadata(item_id, inst_id, inst_name)
+    
+    # Use method call for initial pull
+    DataExporter.run_export(bank_filter=item_id)
+    return jsonify({"status": "connected", "item_id": item_id})
+
+if __name__ == "__main__":
+    app.run(port=5000)
