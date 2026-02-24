@@ -1,116 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plaid Connect</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f9fc;
+      color: #111827;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      margin: 0;
+    }
+    .card {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+      text-align: center;
+      width: min(420px, calc(100% - 32px));
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      background: #0a66ff;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 12px;
+      color: #374151;
+      font-size: 14px;
+      word-break: break-word;
+    }
+  </style>
+</head>
 <body>
-    <h1>Connect Bank Account</h1>
-    <button id="btn">Launch Plaid Link</button>
-    <p id="connect-status"></p>
-    <hr />
-    <h2>Export Data (Empty = All)</h2>
-    <label for="item-id">Item ID (optional):</label><br />
-    <input id="item-id" type="text" placeholder="item_id" size="40" /><br /><br />
-    <label for="institution">Financial institution (optional, e.g. Chase/Amex):</label><br />
-    <input id="institution" type="text" placeholder="financial institution" size="40" /><br /><br />
-    <label for="account-filter">Account filter (optional: account id / last 4 / account name):</label><br />
-    <input id="account-filter" type="text" placeholder="e.g. 1234 or checking" size="40" /><br /><br />
-    <label for="start-date">Start date:</label>
-    <input id="start-date" type="date" />
-    <label for="end-date">End date:</label>
-    <input id="end-date" type="date" />
-    <br /><br />
-    <label><input id="include-transactions" type="checkbox" checked /> Include transactions</label>
-    <label><input id="include-balances" type="checkbox" checked /> Include balances</label>
-    <button id="range-btn">Fetch Date Range</button>
-    <p id="range-status"></p>
-    <pre id="items-preview"></pre>
-    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-    <script>
-        async function loadItems() {
-            const itemInput = document.getElementById('item-id');
-            const itemsPreview = document.getElementById('items-preview');
-            const res = await fetch('/api/items');
-            const data = await res.json();
-            if (Array.isArray(data.items) && data.items.length === 1) {
-                itemInput.value = data.items[0].item_id;
-            }
-            if (Array.isArray(data.items) && data.items.length > 0) {
-                itemsPreview.textContent = "Linked items:\n" + data.items.map((item) => {
-                    const label = item.institution_name || item.institution_id || "Unknown Institution";
-                    return `- ${label} (${item.item_id})`;
-                }).join("\n");
-            } else {
-                itemsPreview.textContent = "No linked items yet.";
-            }
-        }
+  <div class="card">
+    <h1>Connect to Plaid</h1>
+    <button id="connectBtn" type="button">Connect Bank</button>
+    <div id="status">Ready.</div>
+  </div>
 
-        document.getElementById('btn').onclick = async () => {
-            const connectStatus = document.getElementById('connect-status');
-            const res = await fetch('/api/create_link_token', {method: 'POST'});
-            const { link_token } = await res.json();
-            const handler = Plaid.create({
-                token: link_token,
-                onSuccess: async (public_token) => {
-                    const exchangeRes = await fetch('/api/exchange_public_token', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ public_token })
-                    });
-                    const data = await exchangeRes.json();
-                    connectStatus.textContent = `Connected. Full history exported to ${data.file}`;
-                    await loadItems();
-                }
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+  <script>
+    const connectBtn = document.getElementById('connectBtn');
+    const statusEl = document.getElementById('status');
+
+    const setStatus = (msg) => { statusEl.textContent = msg; };
+
+    connectBtn.addEventListener('click', async () => {
+      connectBtn.disabled = true;
+      setStatus('Requesting link token...');
+
+      try {
+        const tokenRes = await fetch('/api/create_link_token', { method: 'POST' });
+        const tokenJson = await tokenRes.json();
+        const linkToken = tokenJson.link_token;
+        if (!linkToken) throw new Error('No link_token returned from backend.');
+
+        const handler = Plaid.create({
+          token: linkToken,
+          onSuccess: async (public_token) => {
+            setStatus('Exchanging token...');
+            const exchangeRes = await fetch('/api/exchange_public_token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ public_token })
             });
-            handler.open();
-        };
+            const exchangeJson = await exchangeRes.json();
+            if (!exchangeRes.ok) {
+              throw new Error(exchangeJson.error || 'Token exchange failed.');
+            }
+            setStatus(`Connected. Item ID: ${exchangeJson.item_id}`);
+            connectBtn.disabled = false;
+          },
+          onExit: () => {
+            setStatus('Plaid Link closed.');
+            connectBtn.disabled = false;
+          }
+        });
 
-        document.getElementById('range-btn').onclick = async () => {
-            const itemId = document.getElementById('item-id').value.trim();
-            const institution = document.getElementById('institution').value.trim();
-            const accountFilter = document.getElementById('account-filter').value.trim();
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-            const includeTransactions = document.getElementById('include-transactions').checked;
-            const includeBalances = document.getElementById('include-balances').checked;
-            const status = document.getElementById('range-status');
-
-            if (!includeTransactions && !includeBalances) {
-                status.textContent = 'Choose at least one: Include transactions or Include balances.';
-                return;
-            }
-
-            const payload = {
-                include_transactions: includeTransactions,
-                include_balances: includeBalances
-            };
-            if (startDate) {
-                payload.start_date = startDate;
-            }
-            if (endDate) {
-                payload.end_date = endDate;
-            }
-            if (itemId) {
-                payload.item_id = itemId;
-            }
-            if (institution) {
-                payload.financial_institution = institution;
-            }
-            if (accountFilter) {
-                payload.account_filter = accountFilter;
-            }
-
-            const res = await fetch('/api/fetch_date_range', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                status.textContent = `Error: ${data.error || 'Failed to fetch date range.'}`;
-                return;
-            }
-            status.textContent = `Export created (${data.results.length} file(s)).`;
-        };
-
-        loadItems();
-    </script>
+        handler.open();
+      } catch (err) {
+        setStatus(`Error: ${err.message}`);
+        connectBtn.disabled = false;
+      }
+    });
+  </script>
 </body>
 </html>

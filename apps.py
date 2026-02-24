@@ -85,10 +85,10 @@ class DataExporter:
 
 @app.route('/')
 def index():
-    # Simple check to prevent 404 if index.html is missing
     if os.path.exists('index.html'):
         return render_template_string(open('index.html').read())
-    return "Flask is running. index.html not found.", 404
+    return "Plaid connect page missing.", 404
+
 
 @app.route('/api/create_link_token', methods=['POST'])
 def link_token():
