@@ -8,7 +8,7 @@ The project has three execution paths:
 
 - `apps.py`: Flask app for Plaid Link token creation/exchange and initial full-history pull.
 - `run_script.py`: Script-based manual export where you set start/end dates in code.
-- `sync_data.py`: Rolling sync export for all connected items using a configurable window.
+
 
 Data is written to `RECORDS_DIR` (default: `records`).
 
@@ -18,7 +18,6 @@ Data is written to `RECORDS_DIR` (default: `records`).
 - Secure token exchange via `POST /api/exchange_public_token`.
 - Automatic initial full-history export after account linking.
 - Manual date-range exports through `run_script.py`.
-- Rolling sync exports through `sync_data.py` using `SYNC_WINDOW_DAYS`.
 - JSON persistence for auditability and easy downstream integration.
 
 ## Architecture
@@ -35,8 +34,6 @@ Data is written to `RECORDS_DIR` (default: `records`).
   - Applies optional account filtering and writes output JSON.
 - `run_script.py`
   - Calls `DataExporter.run_export(...)` with explicit dates and optional bank filter.
-- `sync_data.py`
-  - Reads saved tokens and exports a rolling window for each linked item.
 - `records/`
   - Stores `tokens.json`, `items.json`, and exported data files.
 
@@ -47,7 +44,7 @@ Data is written to `RECORDS_DIR` (default: `records`).
 3. Plaid Link returns a `public_token`.
 4. Frontend sends `public_token` to `/api/exchange_public_token`.
 5. Backend exchanges token, saves credentials/metadata, and writes full-history JSON.
-6. Additional exports are run with `run_script.py` or `sync_data.py`.
+6. Additional exports are run with `run_script.py`.
 
 ## Quick Start
 
@@ -115,12 +112,6 @@ Then run:
 python run_script.py
 ```
 
-### 6) Run rolling sync export
-
-```bash
-python sync_data.py
-```
-
 ## Output Files
 
 Files are written to `RECORDS_DIR` (default `records/`):
@@ -129,7 +120,6 @@ Files are written to `RECORDS_DIR` (default `records/`):
 - `items.json`: item metadata (institution info)
 - `full_history_<start>_to_<end>_<item_id>.json`: initial connect export
 - `range_<start>_to_<end>_<item_id>.json`: manual run_script export
-- `weekly_<start>_to_<end>_<item_id>.json`: sync_data rolling export
 
 ## Project Structure
 
@@ -139,7 +129,6 @@ Data-Aggregation-Unifying-Layer/
 ├── apps.py
 ├── index.html
 ├── run_script.py
-├── sync_data.py
 ├── requirements.txt
 ├── extractors/
 │   ├── __init__.py
