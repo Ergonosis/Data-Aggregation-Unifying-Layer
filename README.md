@@ -258,4 +258,4 @@ Data-Aggregation-Unifying-Layer/
 ├── extractors/
 │   ├── __init__.py
 │   └── plaid_ext.py     # Plaid API logic
-└── records/             # Local JSON Store
+└── records/             # Local JSON Storegit config user.email
