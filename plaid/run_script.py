@@ -10,7 +10,7 @@ def run_data_export(
     output_dir: Optional[str] = None
 ):
     """
-    Run the full data export pipeline in one call.
+    Run the full data export pipeline in one single call.
 
     Args:
         start_date (date): Start date for the export.
