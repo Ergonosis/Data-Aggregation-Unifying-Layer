@@ -16,6 +16,7 @@ Data-Aggregation-Unifying-Layer/
 ├── README.md
 ├── requirements.txt              # Core dependencies (Plaid + Flask)
 ├── plaid/
+│   ├── .env                      # gitignored — Plaid credentials (see Plaid › Environment Variables)
 │   ├── apps.py                   # Flask app: Plaid Link flow + DataExporter class
 │   ├── index.html                # Plaid Link frontend UI
 │   ├── run_script.py             # Entry point for manual date-range exports
@@ -27,10 +28,12 @@ Data-Aggregation-Unifying-Layer/
 │       ├── items.json
 │       └── <export_files>.json
 └── microsoft/
-    ├── README.md                 # Microsoft module documentation
+    ├── .env                      # gitignored — Microsoft Graph credentials (see Microsoft › Environment Variables)
     ├── ms_graph_email_client.py  # Microsoft Graph API email client
     └── usage.py                  # Runnable example
 ```
+
+> Each module has its **own** `.env` file in its **own** directory. Do not place either `.env` at the project root.
 
 ---
 
@@ -150,7 +153,7 @@ All files are written to `plaid/records/` (configurable via `RECORDS_DIR`):
 
 ## Microsoft Graph Integration
 
-Retrieves emails from a Microsoft 365 mailbox using client credentials (service-to-service) authentication. No user login is required.
+Retrieves emails from a Microsoft 365 mailbox using **client credentials (service-to-service) authentication** — no user login or OAuth flow required. Authentication, token acquisition, pagination, and message normalization are all handled internally; the public interface is a single function call.
 
 ### Environment Variables
 
