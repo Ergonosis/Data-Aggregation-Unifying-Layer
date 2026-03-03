@@ -1,57 +1,48 @@
 # Data Aggregation Unifying Layer
 
-This service pulls account transaction data from Plaid and stores JSON files locally for downstream processing.
+A centralized interface for pulling financial and communication data from two sources:
 
-## System Overview
+- **Plaid** — bank account transactions via a Flask-based OAuth flow and a script exporter.
+- **Microsoft Graph API** — email data from Microsoft 365 mailboxes via client credentials authentication.
 
-The project has two execution paths:
+All data is normalized and persisted as local JSON for downstream processing and auditing.
 
-- `apps.py`: Flask app for Plaid Link token creation/exchange and initial full-history pull.
-- `run_script.py`: Script-based manual export where you set start/end dates in code.
-- Data is written to `RECORDS_DIR` (default: `records`).
+---
 
-## Key Features
+## Project Structure
 
-- Plaid Link onboarding via `POST /api/create_link_token`.
-- Secure token exchange via `POST /api/exchange_public_token`.
-- Automatic initial full-history export after account linking.
-- Manual date-range exports through `run_script.py`.
-- JSON persistence for auditability and easy downstream integration.
+```text
+Data-Aggregation-Unifying-Layer/
+├── README.md
+├── requirements.txt              # Core dependencies (Plaid + Flask)
+├── plaid/
+│   ├── apps.py                   # Flask app: Plaid Link flow + DataExporter class
+│   ├── index.html                # Plaid Link frontend UI
+│   ├── run_script.py             # Entry point for manual date-range exports
+│   ├── extractors/
+│   │   ├── __init__.py
+│   │   └── plaid_ext.py          # Plaid API wrapper: pagination, filtering, JSON output
+│   └── records/                  # Auto-created output directory (configurable via RECORDS_DIR)
+│       ├── tokens.json
+│       ├── items.json
+│       └── <export_files>.json
+└── microsoft/
+    ├── README.md                 # Microsoft module documentation
+    ├── ms_graph_email_client.py  # Microsoft Graph API email client
+    └── usage.py                  # Runnable example
+```
 
-## Architecture
-
-### Components
-
-- `apps.py`
-  - Initializes Flask and Plaid client wiring.
-  - Stores linked account tokens/metadata.
-  - Triggers initial historical export for newly linked items.
-- `extractors/plaid_ext.py`
-  - Wraps Plaid API calls.
-  - Handles paginated transaction retrieval.
-  - Applies optional account filtering and writes output JSON.
-- `run_script.py`
-  - Calls `DataExporter.run_export(...)` with explicit dates and optional bank filter.
-- `records/`
-  - Stores `tokens.json`, `items.json`, and exported data files.
-
-### Runtime Flow
-
-1. Open `http://localhost:5000` and click `Connect Bank`.
-2. Frontend requests a Plaid `link_token` from `/api/create_link_token`.
-3. Plaid Link returns a `public_token`.
-4. Frontend sends `public_token` to `/api/exchange_public_token`.
-5. Backend exchanges token, saves credentials/metadata, and writes an initial historical JSON export.
-6. Additional exports are run with `run_script.py`.
+---
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.10+
-- Plaid credentials
+- **Plaid**: Client ID and Secret from the [Plaid Dashboard](https://dashboard.plaid.com)
+- **Microsoft** *(optional)*: Azure App Registration with `Mail.Read` application permission granted by a tenant admin
 
-### 1) Create and activate a virtual environment
+### 1. Create and activate a virtual environment
 
 macOS/Linux:
 
@@ -68,15 +59,27 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 .\venv\Scripts\Activate.ps1
 ```
 
-### 2) Install dependencies
+### 2. Install dependencies
+
+For Plaid:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3) Configure environment variables
+For Microsoft Graph *(additional packages required)*:
 
-Create `.env` in the repository root:
+```bash
+pip install requests msal beautifulsoup4 lxml python-dotenv
+```
+
+---
+
+## Plaid Integration
+
+### Environment Variables
+
+Create a `.env` file inside the `plaid/` directory:
 
 ```env
 PLAID_CLIENT_ID=your_client_id
@@ -85,143 +88,157 @@ PLAID_ENV=sandbox
 
 # Output directory for tokens, metadata, and JSON exports
 RECORDS_DIR=records
-
 ```
 
-### 4) Run Plaid connect app
+### Architecture
+
+| File | Responsibility |
+|------|----------------|
+| `plaid/apps.py` | Flask server, Plaid Link token lifecycle, token storage, `DataExporter` class |
+| `plaid/extractors/plaid_ext.py` | Plaid API wrapper: paginated transaction fetch, account filtering, JSON output |
+| `plaid/run_script.py` | Standalone entry point for date-range exports |
+| `plaid/records/` | Persisted output: `tokens.json`, `items.json`, export files |
+
+### Runtime Flow
+
+1. Start the Flask app and open `http://localhost:5000`.
+2. Click **Connect Bank** — the frontend requests a `link_token` from `POST /api/create_link_token`.
+3. Plaid Link returns a `public_token` after the user authenticates.
+4. The frontend sends the `public_token` to `POST /api/exchange_public_token`.
+5. The backend exchanges it for a permanent `access_token`, saves credentials and institution metadata, and automatically triggers a full historical export.
+6. Subsequent exports are run on demand via `run_script.py`.
+
+### Running the Plaid connect app
 
 ```bash
+cd plaid
 python apps.py
 ```
 
-Then open `http://localhost:5000` and connect an institution.
+Open `http://localhost:5000` and connect an institution.
 
-### 5) Run a manual date-range export
+### Running a manual date-range export
 
-Edit `run_script.py` and set:
-
-- `start_date`
-- `end_date`
-- optional `bank_filter`
-
-Then run:
+Call `run_data_export()` in `run_script.py` with your desired parameters and run:
 
 ```bash
+cd plaid
 python run_script.py
 ```
 
-## Output Files
+**Available parameters:**
 
-Files are written to `RECORDS_DIR` (default `records/`):
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `start_date` | `date` | Export start date |
+| `end_date` | `date` | Export end date (defaults to today) |
+| `bank_filter` | `str` | Filter by institution name or item ID |
+| `account_filter` | `list[str]` | Filter by account name, type, or mask |
+| `output_dir` | `str` | Output directory (defaults to `RECORDS_DIR`) |
 
-- `tokens.json`: item_id -> access_token
-- `items.json`: item metadata (institution info)
-- `range_<start>_to_<end>_<item_id>.json`: initial connect export and manual `run_script.py` export
+### Output Files
 
-## Project Structure
+All files are written to `plaid/records/` (configurable via `RECORDS_DIR`):
 
-```text
-Data-Aggregation-Unifying-Layer/
-├── README.md
-├── apps.py
-├── index.html
-├── run_script.py
-├── requirements.txt
-├── extractors/
-│   ├── __init__.py
-│   └── plaid_ext.py
-└── records/ (default, configurable with RECORDS_DIR)
+| File | Description |
+|------|-------------|
+| `tokens.json` | `item_id` → `access_token` mapping |
+| `items.json` | Linked institution metadata |
+| `range_<start>_to_<end>_<item_id>.json` | Transaction export — generated by both initial connect and manual `run_script.py` runs |
+
+---
+
+## Microsoft Graph Integration
+
+Retrieves emails from a Microsoft 365 mailbox using client credentials (service-to-service) authentication. No user login is required.
+
+### Environment Variables
+
+Create a `.env` file inside the `microsoft/` directory:
+
+```env
+MS_CLIENT_ID=your_azure_client_id
+MS_CLIENT_SECRET=your_azure_client_secret
+MS_TENANT_ID=your_azure_tenant_id
+USER_EMAIL=user@company.com
 ```
+
+### Architecture
+
+| File | Responsibility |
+|------|----------------|
+| `microsoft/ms_graph_email_client.py` | `MicrosoftGraphEmailClient` class and `fetch_user_emails()` convenience wrapper |
+| `microsoft/usage.py` | Minimal runnable example |
+
+### Running the Microsoft module
+
+```bash
+cd microsoft
+python usage.py
+```
+
+### Usage
+
+```python
+from ms_graph_email_client import fetch_user_emails
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+emails = fetch_user_emails(
+    client_id=os.environ["MS_CLIENT_ID"],
+    client_secret=os.environ["MS_CLIENT_SECRET"],
+    tenant_id=os.environ["MS_TENANT_ID"],
+    user_email=os.environ["USER_EMAIL"],
+    start_datetime="2026-01-01T00:00:00Z",
+    end_datetime="2026-02-28T23:59:59Z",
+    strip_html=True,   # True → clean plain text | False → raw HTML
+)
+
+if emails:
+    print(emails[0])
+else:
+    print("No emails found in the given date range.")
+```
+
+**`fetch_user_emails` parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `client_id` | `str` | Yes | Azure App Registration client ID |
+| `client_secret` | `str` | Yes | Azure app client secret |
+| `tenant_id` | `str` | Yes | Azure tenant ID |
+| `user_email` | `str` | Yes | Mailbox address to query |
+| `start_datetime` | `str` | Yes | ISO 8601 UTC start (e.g. `"2026-01-01T00:00:00Z"`) |
+| `end_datetime` | `str` | Yes | ISO 8601 UTC end |
+| `strip_html` | `bool` | No | `True` returns clean text, `False` returns raw HTML. Defaults to `True` |
+| `select_fields` | `list[str]` | No | Graph API fields to retrieve. Defaults to `subject`, `from`, `toRecipients`, `receivedDateTime`, `body` |
+| `page_size` | `int` | No | Number of messages per page. Defaults to `50` |
+| `max_pages` | `int` | No | Maximum number of pages to fetch. Defaults to unlimited |
+
+### Return Format
+
+Each email is returned as a dictionary:
+
+```python
+{
+    "subject": "...",
+    "from": "sender@example.com",
+    "to": ["recipient@example.com"],
+    "received_datetime": "2026-01-15T10:30:00Z",
+    "body": "...",
+    "body_content_type": "text" | "html"
+}
+```
+
+---
 
 ## Notes
 
-- Use `PLAID_ENV=sandbox` for local testing.
-- Switch to `development`/`production` with matching credentials when appropriate.
-- Initial account connect exports full available history.
-- `run_script.py` is where you define explicit date ranges.
-  Data Aggregation Unifying Layer
-  This service provides a centralized interface for pulling financial data from multiple sources: banking institutions via Plaid and email-based transaction/notification data via Microsoft Graph API. It standardizes the retrieval and local storage of JSON records for downstream processing and auditing.
-
-System Overview
-The project is divided into two primary extraction engines:
-
-Plaid Integration: A Flask-based web flow for linking bank accounts and a script-based exporter for historical transaction data.
-
-Data is written to the RECORDS_DIR (default: records/).
-
-Key Features
-Plaid Link Onboarding: OAuth-ready flow to connect financial institutions via /api/create_link_token.
-
-Secure Token Exchange: Backend exchange of public tokens for permanent access tokens.
-
-Flexible Data Export: Support for automatic initial historical pulls and manual date-range exports.
-
-JSON Persistence: All data is stored as local JSON for auditability and easy downstream integration.
-
-Architecture
-Components
-apps.py: Flask app for Plaid Link lifecycle management (token creation/exchange) and initial historical exports.
-
-extractors/plaid_ext.py: Wraps Plaid API calls, handles paginated transaction retrieval, and manages output formatting.
-
-run_script.py: Entry point for manual, date-range specific bank transaction exports.
-
-records/: Local storage directory for tokens.json, items.json, and all exported data files.
-
-Runtime Flow
-Plaid Flow:
-
-Open http://localhost:5000 and click Connect Bank.
-
-Frontend requests a link_token, receives a public_token from Plaid, and exchanges it via the backend.
-
-Backend saves credentials and triggers an initial historical JSON export.
-
-Quick Start
-
-1. Prerequisites
-   Python 3.10+
-
-Plaid: Client ID and Secret (from Plaid Dashboard).
-
-2. Installation
-   Bash
-
-# macOS/Linux
-
-python -m venv venv
-source venv/bin/activate
-
-# Windows
-
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install dependencies
-
-pip install -r requirements.txt 3) Configure Environment Variables
-Create a .env file in the repository root:
-
-Code snippet
-
-# Plaid
-
-PLAID_CLIENT_ID=your_client_id
-PLAID_SECRET=your_secret
-PLAID_ENV=sandbox
-
-# Storage
-
-RECORDS_DIR=records 4) Execution
-To start the Plaid connector: python apps.py
-
-To run a manual Plaid export: Edit dates in run_script.py and run python run_script.py.
-
-Output Files
-Files are written to RECORDS_DIR (default records/):
-
-tokens.json: item_id -> access_token mapping.
-
-items.json: Linked institution metadata.
-
-range*<start>\_to*<end>\_<id>.json: Exported transaction sets.
+- Use `PLAID_ENV=sandbox` for local development and testing; switch to `development` or `production` with matching credentials for live data.
+- On Sandbox (demo and testing), Platypus Bank credentials are: username `user_good`, password `pass_good`, phone `1234`.
+- The Microsoft module requires an Azure App Registration with the `Mail.Read` **application** permission (not delegated) granted by a tenant admin.
+- Plaid's initial account connect automatically exports the full available transaction history.
+- All exports are append-safe — each run generates a new timestamped file; no existing files are overwritten.
+- Each module reads its `.env` from its own directory. Place `plaid/.env` for Plaid and `microsoft/.env` for Microsoft Graph.

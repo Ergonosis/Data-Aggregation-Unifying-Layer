@@ -1,5 +1,4 @@
 venv/
 __pycache__/
 .env
-storage/tokens.json
-storage/plaid/*.json
+plaid/records/
