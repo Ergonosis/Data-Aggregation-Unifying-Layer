@@ -14,4 +14,7 @@ emails = fetch_user_emails(
     strip_html=True,  # False → raw HTML: True: extract visible text only
 )
 
-print(emails[0])
+if emails:
+    print(emails[0])
+else:
+    print("No emails found in the given date range.")
